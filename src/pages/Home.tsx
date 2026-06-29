@@ -49,7 +49,7 @@ export function Home() {
 
         <div
           className="bg-red-50 border border-red-200 rounded-2xl p-4 cursor-pointer active:scale-[0.98] transition-transform"
-          onClick={() => navigate('/fund-rating-insights')}
+          onClick={() => navigate('/fund-rating-insights', { state: { tab: 'Need Attention' } })}
         >
           <p className="text-sm font-bold text-red-800">Rebalance Needed</p>
           <p className="text-xs text-red-600 mt-0.5">3 low-rated funds need your attention</p>

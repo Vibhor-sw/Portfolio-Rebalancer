@@ -5,24 +5,38 @@ import { userHoldings, fundUniverse } from '../data/mockData';
 import { formatINR } from '../utils/formatters';
 import { StarRating } from '../components/ui/StarRating';
 import { getModelAllocations } from '../utils/breEngine';
-import { ArrowLeft, CheckCircle2, ArrowRight, Loader2, PartyPopper } from 'lucide-react';
+import {
+  ArrowLeft, CheckCircle2, ArrowRight, Loader2, PartyPopper,
+  Zap, Clock, Info, ChevronDown, ChevronUp,
+} from 'lucide-react';
 import { cn } from '../utils/cn';
-import type { Fund } from '../types/rebalancer';
+import type { Fund, OrderMode } from '../types/rebalancer';
 
 export function RebalanceConfirm() {
   const navigate = useNavigate();
   const { breResults, selectedFundsForSwitch, selectedModel, modelUnits, reset } = useRebalancerStore();
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [orderMode, setOrderMode] = useState<OrderMode | null>(null);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [showModeInfo, setShowModeInfo] = useState<OrderMode | null>(null);
 
   const selectedResults = breResults.filter(r => selectedFundsForSwitch.includes(r.sourceFundId));
 
   const getReplacementFund = (id: string): Fund | undefined =>
     fundUniverse.find(f => f.id === id);
 
+  const totalRedemptionValue = selectedResults.reduce((s, r) => {
+    const f = userHoldings.find(h => h.id === r.sourceFundId);
+    return s + (f?.holdingValue ?? 0);
+  }, 0);
+
+  const totalBuyOrders = selectedResults.reduce((s, r) => s + r.replacements.length, 0);
+
   const handleConfirm = async () => {
+    if (!orderMode) return;
     setSubmitting(true);
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 2200));
     setSubmitting(false);
     setSuccess(true);
   };
@@ -34,56 +48,58 @@ export function RebalanceConfirm() {
 
   if (success) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
-        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center bg-gray-50">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-5">
           <PartyPopper size={36} className="text-brand-green" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Rebalancing Initiated!</h2>
-        <p className="text-sm text-gray-500 mb-2">
-          Your switch request has been successfully placed.
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Orders Placed!</h2>
+        <p className="text-sm text-gray-500 mb-1">
+          Your rebalancing orders have been successfully submitted.
         </p>
-        <p className="text-xs text-gray-400 mb-8">
-          Processing may take 3-5 business days. You'll receive a notification once complete.
-        </p>
+        {orderMode === 'instant_credit' ? (
+          <p className="text-xs text-green-700 font-medium bg-green-50 rounded-xl px-3 py-2 mb-6">
+            ⚡ Broker credit applied — buy orders active immediately.
+          </p>
+        ) : (
+          <p className="text-xs text-amber-700 font-medium bg-amber-50 rounded-xl px-3 py-2 mb-6">
+            ⏳ Sell orders placed. Buy orders will execute after settlement (T+2/T+3).
+          </p>
+        )}
 
-        {/* Summary */}
-        <div className="w-full bg-green-50 border border-green-200 rounded-2xl p-4 mb-6 text-left">
-          <p className="text-xs font-bold text-green-800 mb-2">Switch Summary</p>
-          <div className="space-y-1.5">
-            <div className="flex justify-between">
-              <span className="text-xs text-green-700">Funds switched</span>
-              <span className="text-xs font-bold text-green-900">{selectedResults.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-xs text-green-700">Model used</span>
-              <span className="text-xs font-bold text-green-900">{selectedModel ?? 'Balanced Beta'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-xs text-green-700">Total value</span>
-              <span className="text-xs font-bold text-green-900">
-                {formatINR(
-                  selectedResults.reduce((s, r) => {
-                    const f = userHoldings.find(h => h.id === r.sourceFundId);
-                    return s + (f?.holdingValue ?? 0);
-                  }, 0)
-                )}
-              </span>
-            </div>
+        <div className="w-full bg-white border border-gray-100 shadow-sm rounded-2xl p-4 mb-6 text-left space-y-2">
+          <p className="text-xs font-bold text-gray-700 mb-2">Order Summary</p>
+          <div className="flex justify-between">
+            <span className="text-xs text-gray-500">Sell orders</span>
+            <span className="text-xs font-bold text-red-600">{selectedResults.length}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-gray-500">Buy orders</span>
+            <span className="text-xs font-bold text-green-600">{totalBuyOrders}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-gray-500">Total switch value</span>
+            <span className="text-xs font-bold text-gray-800">{formatINR(totalRedemptionValue)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-xs text-gray-500">Model used</span>
+            <span className="text-xs font-bold text-gray-800">{selectedModel ?? 'Balanced Beta'}</span>
           </div>
         </div>
 
-        <button
-          onClick={handleDone}
-          className="w-full bg-brand-green text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-green-700 active:scale-[0.98] transition-all"
-        >
-          Go to Portfolio
-        </button>
+        <div className="w-full space-y-2">
+          <button onClick={handleDone} className="w-full bg-brand-green text-white font-bold py-3.5 rounded-2xl shadow hover:bg-green-700 active:scale-[0.98] transition-all">
+            Go to Portfolio
+          </button>
+          <button onClick={() => { reset(); navigate('/'); }} className="w-full bg-white border border-gray-200 text-gray-700 font-semibold py-3 rounded-2xl hover:bg-gray-50 active:scale-[0.98] transition-all text-sm">
+            Go to Dashboard
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-screen pb-24">
+    <div className="flex flex-col min-h-screen pb-56 bg-gray-50">
       {/* Header */}
       <div className="bg-white sticky top-0 z-30 border-b border-gray-100">
         <div className="flex items-center gap-3 px-4 pt-10 pb-4">
@@ -91,8 +107,8 @@ export function RebalanceConfirm() {
             <ArrowLeft size={20} className="text-gray-700" />
           </button>
           <div>
-            <h1 className="text-base font-bold text-gray-900">Confirm Rebalance</h1>
-            <p className="text-xs text-gray-500">Final review before submission</p>
+            <h1 className="text-base font-bold text-gray-900">Review & Confirm</h1>
+            <p className="text-xs text-gray-500">Final review before placing orders</p>
           </div>
         </div>
       </div>
@@ -100,8 +116,8 @@ export function RebalanceConfirm() {
       <div className="px-4 py-4 space-y-4">
         {/* Step indicator */}
         <div className="flex items-center gap-2">
-          {['Select Funds', 'Consent', 'Confirm'].map((step, i) => (
-            <div key={step} className="flex items-center gap-2 flex-1">
+          {['Select', 'Consent', 'Confirm'].map((step, i) => (
+            <div key={step} className="flex items-center gap-1.5 flex-1">
               <div className={cn(
                 'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
                 i <= 1 ? 'bg-brand-green text-white' : 'bg-brand-green text-white'
@@ -114,124 +130,252 @@ export function RebalanceConfirm() {
           ))}
         </div>
 
+        {/* Summary chips */}
+        <div className="flex gap-2 flex-wrap">
+          <div className="bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs font-semibold text-gray-700">
+            🔄 Switching {selectedResults.length} fund{selectedResults.length > 1 ? 's' : ''}
+          </div>
+          <div className="bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs font-semibold text-gray-700">
+            💰 {formatINR(totalRedemptionValue)}
+          </div>
+          <div className="bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs font-semibold text-gray-700">
+            📋 {selectedResults.length + totalBuyOrders} orders
+          </div>
+        </div>
+
         {/* Switch pairs */}
         <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Switch Orders</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Switch Orders</p>
           <div className="space-y-3">
             {selectedResults.map(result => {
               const sourceFund = userHoldings.find(f => f.id === result.sourceFundId);
               if (!sourceFund) return null;
-              const totalUnits = Math.round(sourceFund.holdingValue / 10);
+              const sourceNav = sourceFund.nav ?? 100;
+              const units = parseFloat((sourceFund.holdingValue / sourceNav).toFixed(3));
               const modelToUse = selectedModel ?? 'Balanced Beta';
-              const defaultAlloc = getModelAllocations(result.replacements, modelToUse, totalUnits);
+              const defaultAlloc = getModelAllocations(result.replacements, modelToUse, Math.round(units * 1000));
+              const isExpanded = expandedRow === result.sourceFundId;
 
               return (
                 <div key={result.sourceFundId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  {/* Source */}
-                  <div className="px-4 pt-4 pb-3 border-b border-gray-50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] font-bold text-red-600 uppercase bg-red-50 px-2 py-0.5 rounded-full">Redeem</span>
+                  {/* Collapsed header */}
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                    onClick={() => setExpandedRow(isExpanded ? null : result.sourceFundId)}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                      style={{ backgroundColor: sourceFund.amcColor }}
+                    >
+                      {sourceFund.amcInitials}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                        style={{ backgroundColor: sourceFund.amcColor }}
-                      >
-                        {sourceFund.amcInitials}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-gray-900 truncate">{sourceFund.fundName}</p>
-                        <p className="text-[10px] text-gray-500">{sourceFund.subCategory} • {totalUnits} units</p>
-                      </div>
-                      <p className="text-sm font-bold text-gray-900">{formatINR(sourceFund.holdingValue)}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-900 truncate">{sourceFund.fundName}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">
+                        Sell {units.toFixed(3)} units → {result.replacements.length} buy order{result.replacements.length > 1 ? 's' : ''}
+                      </p>
                     </div>
-                  </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-bold text-brand-red">{formatINR(sourceFund.holdingValue)}</p>
+                      {isExpanded ? <ChevronUp size={14} className="text-gray-400 ml-auto mt-0.5" /> : <ChevronDown size={14} className="text-gray-400 ml-auto mt-0.5" />}
+                    </div>
+                  </button>
 
-                  {/* Replacements */}
-                  <div className="px-4 py-3 space-y-2.5">
-                    <span className="text-[10px] font-bold text-green-600 uppercase bg-green-50 px-2 py-0.5 rounded-full">Purchase</span>
-                    {result.replacements.map(rep => {
-                      const fund = getReplacementFund(rep.id);
-                      if (!fund) return null;
-                      const units = modelUnits[sourceFund.id]?.[fund.id] ?? defaultAlloc[fund.id] ?? 0;
-                      return (
-                        <div key={fund.id} className="flex items-center gap-3 mt-2">
-                          <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                            style={{ backgroundColor: fund.amcColor }}
-                          >
-                            {fund.amcInitials}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-gray-900 truncate">{fund.fundName}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <StarRating rating={fund.geojitRating} size={10} />
-                              {fund.badge && (
-                                <span className={cn(
-                                  'text-[9px] px-1 py-0.5 rounded font-bold',
-                                  fund.badge === 'Gold' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
-                                )}>
-                                  {fund.badge}
-                                </span>
-                              )}
+                  {/* Expanded detail */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-50 px-4 py-3 space-y-3 bg-gray-50/50">
+                      {/* Sell row */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">REDEEM</span>
+                        <span className="text-xs text-gray-600 flex-1 truncate">{sourceFund.fundName}</span>
+                        <span className="text-xs font-bold text-gray-800">{units.toFixed(3)} units</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400 ml-1">
+                        <span>NAV ₹{sourceNav.toFixed(4)}</span>
+                        <span>•</span>
+                        <span>Value {formatINR(sourceFund.holdingValue)}</span>
+                      </div>
+
+                      {/* Buy rows */}
+                      <div className="flex items-center gap-2 ml-1">
+                        <ArrowRight size={12} className="text-brand-green" />
+                        <span className="text-[10px] font-bold text-green-700">Purchase Orders</span>
+                      </div>
+                      {result.replacements.map(rep => {
+                        const fund = getReplacementFund(rep.id);
+                        if (!fund) return null;
+                        const repUnits = parseFloat(((modelUnits[sourceFund.id]?.[fund.id] ?? (defaultAlloc[fund.id] ?? 0)) / 1000).toFixed(3));
+                        const fundNav = fund.nav ?? 100;
+                        return (
+                          <div key={fund.id} className="bg-white rounded-xl p-3 border border-green-100">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+                                style={{ backgroundColor: fund.amcColor }}
+                              >
+                                {fund.amcInitials}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-900 truncate">{fund.fundName}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <StarRating rating={fund.geojitRating} size={9} />
+                                  {fund.badge && (
+                                    <span className={cn(
+                                      'text-[9px] px-1 py-0.5 rounded font-bold',
+                                      fund.badge === 'Gold' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
+                                    )}>{fund.badge}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-bold text-green-700">{repUnits.toFixed(3)} units</p>
+                                <p className="text-[9px] text-gray-400">NAV ₹{fundNav.toFixed(4)}</p>
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-xs font-bold text-brand-green">{units} units</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Final summary */}
-        <div className="bg-gray-50 rounded-2xl p-4 border border-gray-200">
-          <p className="text-xs font-bold text-gray-700 mb-3">Order Summary</p>
-          <div className="space-y-1.5">
-            <div className="flex justify-between">
-              <span className="text-xs text-gray-500">Total switch orders</span>
-              <span className="text-xs font-semibold text-gray-800">{selectedResults.length}</span>
+        {/* ── ORDER MODE SELECTION ─────────────────── */}
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">How to Place Orders</p>
+          <div className="space-y-2.5">
+
+            {/* Option 1 — Instant with broker credit */}
+            <div
+              className={cn(
+                'bg-white rounded-2xl border-2 p-4 cursor-pointer transition-all',
+                orderMode === 'instant_credit' ? 'border-green-500 shadow-sm' : 'border-gray-100 hover:border-gray-200'
+              )}
+              onClick={() => setOrderMode('instant_credit')}
+            >
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  'mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0',
+                  orderMode === 'instant_credit' ? 'border-green-500 bg-green-500' : 'border-gray-300'
+                )}>
+                  {orderMode === 'instant_credit' && (
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Zap size={14} className="text-green-600" />
+                    <p className="text-sm font-bold text-gray-900">Instant Order with Broker Credit</p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Your broker provides <span className="font-semibold text-green-700">same-day credit</span> against the redemption proceeds. Both sell and buy orders are placed and executed <span className="font-semibold">today</span>.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">⚡ Same-day execution</span>
+                    <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">No wait</span>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowModeInfo(showModeInfo === 'instant_credit' ? null : 'instant_credit'); }}
+                    className="mt-2 flex items-center gap-1 text-[10px] text-blue-500 font-medium"
+                  >
+                    <Info size={11} /> {showModeInfo === 'instant_credit' ? 'Hide details' : 'How does this work?'}
+                  </button>
+                  {showModeInfo === 'instant_credit' && (
+                    <div className="mt-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
+                      <p className="text-[10px] text-blue-800 leading-relaxed">
+                        Your broker extends a short-term credit line (similar to a margin facility) equal to the redemption amount. This lets you buy the new funds immediately without waiting for the sold units to settle. The credit is automatically squared off when settlement completes (T+2 to T+3 business days). Interest may apply for the credit period — check with your broker.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-xs text-gray-500">Rebalancing model</span>
-              <span className="text-xs font-semibold text-gray-800">{selectedModel ?? 'Balanced Beta'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-xs text-gray-500">Total redemption value</span>
-              <span className="text-xs font-bold text-brand-red">
-                {formatINR(selectedResults.reduce((s, r) => {
-                  const f = userHoldings.find(h => h.id === r.sourceFundId);
-                  return s + (f?.holdingValue ?? 0);
-                }, 0))}
-              </span>
+
+            {/* Option 2 — Wait for settlement */}
+            <div
+              className={cn(
+                'bg-white rounded-2xl border-2 p-4 cursor-pointer transition-all',
+                orderMode === 'wait_settlement' ? 'border-amber-500 shadow-sm' : 'border-gray-100 hover:border-gray-200'
+              )}
+              onClick={() => setOrderMode('wait_settlement')}
+            >
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  'mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0',
+                  orderMode === 'wait_settlement' ? 'border-amber-500 bg-amber-500' : 'border-gray-300'
+                )}>
+                  {orderMode === 'wait_settlement' && (
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} className="text-amber-600" />
+                    <p className="text-sm font-bold text-gray-900">Place After Settlement</p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Sell orders are placed today. <span className="font-semibold text-amber-700">Buy orders are queued</span> and executed automatically after your redemption proceeds are credited (T+2 / T+3 business days).
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-medium">⏳ Buy after T+2/T+3</span>
+                    <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-medium">No credit cost</span>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowModeInfo(showModeInfo === 'wait_settlement' ? null : 'wait_settlement'); }}
+                    className="mt-2 flex items-center gap-1 text-[10px] text-blue-500 font-medium"
+                  >
+                    <Info size={11} /> {showModeInfo === 'wait_settlement' ? 'Hide details' : 'How does this work?'}
+                  </button>
+                  {showModeInfo === 'wait_settlement' && (
+                    <div className="mt-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
+                      <p className="text-[10px] text-blue-800 leading-relaxed">
+                        Your sell (redemption) orders are placed immediately at today's NAV. The proceeds from the redemption typically settle in 2–3 business days. Once the money is credited to your account, the queued buy orders will automatically execute at the NAV on that date. This avoids any credit cost but means you'll be out of the market for 2–3 days.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* CTA */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] px-4 pb-6 pt-3 bg-gradient-to-t from-gray-100 to-transparent">
+      {/* Fixed bottom CTA */}
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] px-4 pb-6 pt-3 bg-gradient-to-t from-gray-100 to-transparent space-y-2">
         <button
           onClick={handleConfirm}
-          disabled={submitting}
-          className="w-full flex items-center justify-center gap-2 bg-brand-green text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-green-700 active:scale-[0.98] transition-all disabled:opacity-70"
+          disabled={submitting || !orderMode}
+          className={cn(
+            'w-full flex items-center justify-center gap-2 font-bold py-4 rounded-2xl shadow-lg transition-all',
+            orderMode
+              ? orderMode === 'instant_credit'
+                ? 'bg-brand-green text-white hover:bg-green-700 active:scale-[0.98]'
+                : 'bg-amber-500 text-white hover:bg-amber-600 active:scale-[0.98]'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          )}
         >
           {submitting ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              Processing...
-            </>
+            <><Loader2 size={16} className="animate-spin" /> Processing...</>
+          ) : orderMode === 'instant_credit' ? (
+            <><Zap size={16} /> Place All Orders Now</>
+          ) : orderMode === 'wait_settlement' ? (
+            <><Clock size={16} /> Sell Now, Buy After Settlement</>
           ) : (
-            <>
-              Place Switch Order
-              <ArrowRight size={16} />
-            </>
+            <>Select an order mode above</>
           )}
+        </button>
+        <button
+          onClick={() => { reset(); navigate('/'); }}
+          className="w-full text-center text-xs text-gray-400 py-1 hover:text-gray-600"
+        >
+          Cancel — exit without placing orders
         </button>
       </div>
     </div>

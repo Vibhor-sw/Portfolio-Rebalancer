@@ -17,7 +17,10 @@ export interface Fund {
   cagr1Y?: number | null;
   cagr3Y?: number | null;
   cagr5Y?: number | null;
+  nav?: number | null; // NAV in ₹ — 4 decimal places when displayed
 }
+
+export type OrderMode = 'instant_credit' | 'wait_settlement';
 
 export type RatingTier = 'Highly Rated' | 'Moderately Rated' | 'Need Attention' | 'Not Rated';
 

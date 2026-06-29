@@ -63,7 +63,7 @@ export function Portfolio() {
         {needAttentionCount > 0 && (
           <div
             className="bg-red-50 border border-red-200 rounded-2xl p-4 cursor-pointer active:scale-[0.98] transition-transform"
-            onClick={() => navigate('/fund-rating-insights')}
+            onClick={() => navigate('/fund-rating-insights', { state: { tab: 'Need Attention' } })}
           >
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">

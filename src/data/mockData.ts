@@ -21,6 +21,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 22.3,
     cagr3Y: 18.1,
     cagr5Y: 16.4,
+    nav: 124.3567,
   },
   {
     id: 'h2',
@@ -41,6 +42,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 19.8,
     cagr3Y: 17.2,
     cagr5Y: 18.9,
+    nav: 84.2198,
   },
   {
     id: 'h3',
@@ -61,6 +63,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 28.4,
     cagr3Y: 22.1,
     cagr5Y: 19.7,
+    nav: 187.4512,
   },
   // Moderately Rated (Geojit 3 star)
   {
@@ -82,6 +85,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 14.2,
     cagr3Y: 11.8,
     cagr5Y: 13.1,
+    nav: 213.6789,
   },
   {
     id: 'h5',
@@ -102,6 +106,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 10.1,
     cagr3Y: 9.4,
     cagr5Y: 11.2,
+    nav: 56.4321,
   },
   // Need Attention (Geojit 1-2 star)
   {
@@ -123,6 +128,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 6.2,
     cagr3Y: 4.1,
     cagr5Y: 8.9,
+    nav: 143.2156,
   },
   {
     id: 'h7',
@@ -143,6 +149,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 3.8,
     cagr3Y: 2.4,
     cagr5Y: 7.1,
+    nav: 67.8934,
   },
   {
     id: 'h8',
@@ -163,6 +170,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 2.1,
     cagr3Y: 1.8,
     cagr5Y: 5.4,
+    nav: 89.1243,
   },
   // Not Rated
   {
@@ -184,6 +192,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 11.2,
     cagr3Y: null,
     cagr5Y: null,
+    nav: 32.4567,
   },
   {
     id: 'h10',
@@ -204,6 +213,7 @@ export const userHoldings: Fund[] = [
     cagr1Y: 8.9,
     cagr3Y: null,
     cagr5Y: null,
+    nav: 18.7623,
   },
 ];
 
@@ -228,6 +238,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 42.1,
     cagr3Y: 32.4,
     cagr5Y: 28.7,
+    nav: 312.4589,
   },
   {
     id: 'u2',
@@ -248,6 +259,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 38.4,
     cagr3Y: 28.1,
     cagr5Y: 24.9,
+    nav: 154.3210,
   },
   {
     id: 'u3',
@@ -268,6 +280,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 34.2,
     cagr3Y: 26.8,
     cagr5Y: 22.1,
+    nav: 98.7654,
   },
   // Flexi Cap replacements (for h7 replacement)
   {
@@ -289,6 +302,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 36.8,
     cagr3Y: 27.3,
     cagr5Y: 24.1,
+    nav: 87.6543,
   },
   {
     id: 'u5',
@@ -309,6 +323,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 28.4,
     cagr3Y: 21.9,
     cagr5Y: 19.2,
+    nav: 53.2198,
   },
   {
     id: 'u6',
@@ -329,6 +344,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 24.1,
     cagr3Y: 18.7,
     cagr5Y: 16.4,
+    nav: 41.8765,
   },
   // Mid Cap replacements (for h8)
   {
@@ -350,6 +366,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 44.2,
     cagr3Y: 33.1,
     cagr5Y: 28.4,
+    nav: 276.5432,
   },
   {
     id: 'u8',
@@ -370,6 +387,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 38.7,
     cagr3Y: 28.4,
     cagr5Y: 24.2,
+    nav: 198.3456,
   },
   {
     id: 'u9',
@@ -390,6 +408,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 51.8,
     cagr3Y: 36.2,
     cagr5Y: 29.1,
+    nav: 89.4321,
   },
   // Additional universe funds
   {
@@ -411,6 +430,7 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 31.6,
     cagr3Y: 24.1,
     cagr5Y: 21.3,
+    nav: 67.1234,
   },
   {
     id: 'u11',
@@ -431,5 +451,6 @@ export const fundUniverse: Fund[] = [
     cagr1Y: 29.4,
     cagr3Y: 22.1,
     cagr5Y: 18.7,
+    nav: 112.8901,
   },
 ];

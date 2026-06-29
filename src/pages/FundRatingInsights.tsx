@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { userHoldings, fundUniverse } from '../data/mockData';
 import { getRatingTier, getTierColor, formatINR } from '../utils/formatters';
 import { FundCard } from '../components/FundCard';
@@ -11,36 +11,54 @@ import { cn } from '../utils/cn';
 
 const TIERS: RatingTier[] = ['Highly Rated', 'Moderately Rated', 'Need Attention', 'Not Rated'];
 
-const MODEL_INFO: { model: RebalancingModel; subtitle: string; description: string; color: string }[] = [
+interface ModelInfo {
+  model: RebalancingModel;
+  subtitle: string;
+  description: string;
+  detail: string;
+  color: string;
+  icon: string;
+}
+
+const MODEL_INFO: ModelInfo[] = [
   {
     model: 'Smart Alpha',
     subtitle: 'Aggressive Growth',
     description: 'Concentrates 70% in the highest-rated fund. Best for aggressive growth seekers.',
+    detail: 'Allocates 70% to the top-rated replacement, 20% to the second, and 10% to the third. Maximises potential upside but concentrates risk in fewer funds.',
     color: '#dc2626',
+    icon: '🎯',
   },
   {
     model: 'Balanced Beta',
     subtitle: 'Risk Balanced',
     description: 'Splits equally across all suggested replacements. Ideal for balanced risk-takers.',
+    detail: 'Divides your switch amount equally among all replacement funds. Reduces concentration risk while still moving to better-rated alternatives.',
     color: '#ea580c',
+    icon: '⚖️',
   },
   {
     model: 'Research Driven',
     subtitle: 'Data Backed',
     description: 'Weights funds by 3-year CAGR performance. Suited for data-driven investors.',
+    detail: "Allocates proportionally based on each fund's 3-year CAGR. Funds with stronger track records receive a larger share of the switch amount.",
     color: '#1d4ed8',
+    icon: '📊',
   },
 ];
 
 export function FundRatingInsights() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<RatingTier>('Highly Rated');
+  const location = useLocation();
+  const locationState = location.state as { tab?: RatingTier } | null;
+
+  const [activeTab, setActiveTab] = useState<RatingTier>(locationState?.tab ?? 'Highly Rated');
   const [showModelModal, setShowModelModal] = useState(false);
+  const [expandedModelInfo, setExpandedModelInfo] = useState<RebalancingModel | null>(null);
   const { selectedModel, setSelectedModel, setBreResults } = useRebalancerStore();
 
   const needAttentionFunds = userHoldings.filter(f => getRatingTier(f) === 'Need Attention');
 
-  // When user first visits Need Attention tab, show model modal if no model selected
   useEffect(() => {
     if (activeTab === 'Need Attention' && !selectedModel) {
       setShowModelModal(true);
@@ -55,8 +73,7 @@ export function FundRatingInsights() {
   const handleSelectModel = (model: RebalancingModel) => {
     setSelectedModel(model);
     setShowModelModal(false);
-
-    // Compute BRE results for Need Attention funds
+    setExpandedModelInfo(null);
     const results = needAttentionFunds.map(f => ({
       sourceFundId: f.id,
       replacements: getReplacements(f, fundUniverse, userHoldings),
@@ -119,17 +136,12 @@ export function FundRatingInsights() {
                 )}
                 style={isActive ? { backgroundColor: color, borderColor: color } : {}}
               >
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: isActive ? 'white' : color }}
-                />
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: isActive ? 'white' : color }} />
                 {tier}
-                <span
-                  className={cn(
-                    'text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-0.5',
-                    isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
-                  )}
-                >
+                <span className={cn(
+                  'text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-0.5',
+                  isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
+                )}>
                   {funds.length}
                 </span>
               </button>
@@ -145,16 +157,13 @@ export function FundRatingInsights() {
           <span className="text-xs text-red-700 flex-1">
             Model: <span className="font-bold">{selectedModel}</span>
           </span>
-          <button
-            onClick={() => setShowModelModal(true)}
-            className="text-xs text-red-600 font-semibold underline"
-          >
+          <button onClick={() => setShowModelModal(true)} className="text-xs text-red-600 font-semibold underline">
             Change
           </button>
         </div>
       )}
 
-      {/* Summary stats for active tier */}
+      {/* Summary stats */}
       {activeFunds.length > 0 && (
         <div className="mx-4 mt-3 bg-white rounded-xl p-3 border border-gray-100 shadow-sm">
           <div className="grid grid-cols-3 gap-2">
@@ -163,7 +172,7 @@ export function FundRatingInsights() {
               <p className="text-sm font-bold text-gray-800">{activeFunds.length}</p>
             </div>
             <div>
-              <p className="text-[10px] text-gray-400">Invested</p>
+              <p className="text-[10px] text-gray-400">Market Value</p>
               <p className="text-sm font-bold text-gray-800">
                 {formatINR(activeFunds.reduce((s, f) => s + f.holdingValue, 0))}
               </p>
@@ -171,7 +180,7 @@ export function FundRatingInsights() {
             <div>
               <p className="text-[10px] text-gray-400">% of Portfolio</p>
               <p className="text-sm font-bold" style={{ color: getTierColor(activeTab) }}>
-                {((activeFunds.reduce((s, f) => s + f.holdingValue, 0) / totalHolding) * 100).toFixed(1)}%
+                {Math.round((activeFunds.reduce((s, f) => s + f.holdingValue, 0) / totalHolding) * 100)}%
               </p>
             </div>
           </div>
@@ -189,7 +198,6 @@ export function FundRatingInsights() {
             onSwitch={handleSwitchFund}
           />
         ))}
-
         {activeFunds.length === 0 && (
           <div className="text-center py-12">
             <p className="text-gray-400 text-sm">No funds in this category</p>
@@ -197,7 +205,7 @@ export function FundRatingInsights() {
         )}
       </div>
 
-      {/* Rebalance All button for Need Attention */}
+      {/* Rebalance All CTA */}
       {activeTab === 'Need Attention' && needAttentionFunds.length > 0 && (
         <div className="sticky bottom-20 px-4 pb-3 pt-2 bg-gradient-to-t from-gray-100 via-gray-100/90 to-transparent">
           <button
@@ -211,53 +219,102 @@ export function FundRatingInsights() {
         </div>
       )}
 
-      {/* Model Selection Modal */}
+      {/* Model Selection Modal — CENTER overlay */}
       {showModelModal && (
-        <div className="fixed inset-0 z-50 flex items-end">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => selectedModel && setShowModelModal(false)} />
-          <div className="relative w-full max-w-[480px] mx-auto bg-white rounded-t-3xl p-6 animate-in slide-in-from-bottom duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => selectedModel && setShowModelModal(false)}
+          />
+          <div className="relative w-full max-w-[400px] bg-white rounded-3xl p-5 shadow-2xl">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-lg font-bold text-gray-900">Choose Rebalancing Model</h2>
+              <h2 className="text-base font-bold text-gray-900">Choose Rebalancing Model</h2>
               {selectedModel && (
-                <button onClick={() => setShowModelModal(false)} className="p-1">
+                <button
+                  onClick={() => setShowModelModal(false)}
+                  className="p-1 rounded-full hover:bg-gray-100"
+                >
                   <X size={18} className="text-gray-500" />
                 </button>
               )}
             </div>
-            <p className="text-xs text-gray-500 mb-5">
-              Select how you'd like units to be distributed across replacement funds.
+            <p className="text-xs text-gray-500 mb-4">
+              Applies to all funds. Tap <Info size={11} className="inline" /> for details on each model.
             </p>
 
-            <div className="space-y-3">
-              {MODEL_INFO.map(({ model, subtitle, description, color }) => (
-                <button
-                  key={model}
-                  onClick={() => handleSelectModel(model)}
-                  className={cn(
-                    'w-full text-left p-4 rounded-2xl border-2 transition-all',
-                    selectedModel === model ? 'border-opacity-100 shadow-sm' : 'border-gray-100 hover:border-gray-200'
-                  )}
-                  style={selectedModel === model ? { borderColor: color, backgroundColor: color + '08' } : {}}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
-                      style={{ backgroundColor: color }}
-                    >
-                      {model.split(' ').map(w => w[0]).join('')}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-gray-900">{model}</p>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: color }}>
-                          {subtitle}
-                        </span>
+            <div className="space-y-2.5">
+              {MODEL_INFO.map(({ model, subtitle, description, detail, color, icon }) => {
+                const isSelected = selectedModel === model;
+                const isExpanded = expandedModelInfo === model;
+                return (
+                  <div
+                    key={model}
+                    className={cn(
+                      'rounded-2xl border-2 transition-all overflow-hidden',
+                      isSelected ? 'shadow-sm' : 'border-gray-100'
+                    )}
+                    style={isSelected ? { borderColor: color, backgroundColor: color + '08' } : {}}
+                  >
+                    {/* Main row */}
+                    <div className="flex items-start gap-3 p-3 cursor-pointer" onClick={() => handleSelectModel(model)}>
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
+                        style={{ backgroundColor: color + '18' }}
+                      >
+                        {icon}
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{description}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-bold text-gray-900">{model}</p>
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold text-white"
+                            style={{ backgroundColor: color }}
+                          >
+                            {subtitle}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{description}</p>
+                      </div>
+                      {/* Info icon */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedModelInfo(isExpanded ? null : model);
+                        }}
+                        className={cn(
+                          'flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5 transition-colors',
+                          isExpanded ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                        )}
+                      >
+                        <Info size={12} />
+                      </button>
+                    </div>
+
+                    {/* Expanded detail */}
+                    {isExpanded && (
+                      <div className="px-3 pb-2 -mt-1">
+                        <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
+                          <p className="text-xs text-blue-800 leading-relaxed">{detail}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Select button */}
+                    <div className="px-3 pb-3">
+                      <button
+                        onClick={() => handleSelectModel(model)}
+                        className={cn(
+                          'w-full py-2 rounded-xl text-xs font-bold transition-all',
+                          isSelected ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        )}
+                        style={isSelected ? { backgroundColor: color } : {}}
+                      >
+                        {isSelected ? '✓ Selected' : 'Select this model'}
+                      </button>
                     </div>
                   </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
