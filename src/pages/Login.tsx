@@ -51,15 +51,15 @@ export default function Login() {
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col justify-end overflow-hidden bg-gradient-to-b from-slate-900 via-slate-900 to-primary/40 text-white">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-slate-900 via-slate-900 to-primary/40 p-6 text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.08),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.08),transparent_40%)]" />
       <div className="absolute inset-0 bg-black/40" />
 
       <motion.div
-        initial={{ opacity: 0, y: 40 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative z-10 mx-auto w-full max-w-md rounded-t-3xl bg-background p-6 text-foreground"
+        className="relative z-10 mx-auto w-full max-w-md rounded-3xl bg-background p-6 text-foreground shadow-2xl"
       >
         <div className="mb-6 flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">

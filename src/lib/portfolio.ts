@@ -185,3 +185,16 @@ export function groupBy<T, K extends string | number>(items: T[], key: (item: T)
     return acc;
   }, {} as Record<K, T[]>);
 }
+
+export function recommendationClassBreakdown(
+  stockRecos: StockRecommendation[],
+  mfRecos: MfRecommendation[]
+): Record<InstrumentClass, number> {
+  return {
+    Stocks: stockRecos.reduce((sum, r) => sum + r.newQty * r.ltp, 0),
+    "Large Cap MF": mfRecos.filter((r) => r.category === "Large Cap MF").reduce((sum, r) => sum + r.newUnits * r.nav, 0),
+    "Mid Cap MF": mfRecos.filter((r) => r.category === "Mid Cap MF").reduce((sum, r) => sum + r.newUnits * r.nav, 0),
+    "Small Cap MF": mfRecos.filter((r) => r.category === "Small Cap MF").reduce((sum, r) => sum + r.newUnits * r.nav, 0),
+    "Flexi Cap MF": mfRecos.filter((r) => r.category === "Flexi Cap MF").reduce((sum, r) => sum + r.newUnits * r.nav, 0),
+  };
+}

@@ -17,6 +17,8 @@ interface OptimizerFlowDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onComplete: () => void;
+  /** When true, the dialog cannot be dismissed without completing a valid selection (no close icon, outside click, or escape). */
+  mandatory?: boolean;
 }
 
 const PAGES: { key: PortfolioTypeChoice; title: string; description: string }[] = [
@@ -47,7 +49,7 @@ const SUGGESTED: Record<InstrumentClass, number> = {
   "Flexi Cap MF": 15,
 };
 
-export function OptimizerFlowDialog({ open, onOpenChange, onComplete }: OptimizerFlowDialogProps) {
+export function OptimizerFlowDialog({ open, onOpenChange, onComplete, mandatory }: OptimizerFlowDialogProps) {
   const { holdings } = useHoldings();
   const { selectedPortfolio } = usePortfolio();
   const rebalance = useRebalance();
@@ -80,17 +82,11 @@ export function OptimizerFlowDialog({ open, onOpenChange, onComplete }: Optimize
   const targetTotal = ALL_INSTRUMENTS.reduce((sum, k) => sum + (targetPcts[k] || 0), 0);
   const targetValid = Math.round(targetTotal) === 100;
 
-  const introducesNewType = React.useMemo(() => {
-    if (page.key === "only_stocks") {
-      return ALL_INSTRUMENTS.some((i) => i !== "Stocks" && selectedInstruments.has(i) && targetPcts[i] > 0);
-    }
-    if (page.key === "only_mfs") {
-      return selectedInstruments.has("Stocks") && targetPcts.Stocks > 0;
-    }
-    return false;
-  }, [page.key, selectedInstruments, targetPcts]);
-
-  const internalDisabled = !targetValid || (isSingleType && (diversify === "diversify" || introducesNewType));
+  // For a single-type portfolio (Only Stocks / Only MFs), choosing "Diversify" means the user
+  // wants to bring in the complementary instrument type, which requires external research —
+  // internal-only optimization isn't offered in that case.
+  const showInternalOption = !(isSingleType && diversify === "diversify");
+  const internalDisabled = !targetValid;
 
   const handleConfirm = (includeExternalReco: boolean) => {
     if (!targetValid) {
@@ -109,11 +105,20 @@ export function OptimizerFlowDialog({ open, onOpenChange, onComplete }: Optimize
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+    <Dialog open={open} onOpenChange={mandatory ? () => {} : onOpenChange}>
+      <DialogContent
+        className="max-w-sm"
+        hideClose={mandatory}
+        onInteractOutside={(e) => mandatory && e.preventDefault()}
+        onEscapeKeyDown={(e) => mandatory && e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Optimize My Portfolio</DialogTitle>
-          <DialogDescription>Choose how you'd like your equity portfolio optimized.</DialogDescription>
+          <DialogDescription>
+            {mandatory
+              ? "Your input is required before you can view optimized recommendations."
+              : "Choose how you'd like your equity portfolio optimized."}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex items-center justify-between">
@@ -221,9 +226,11 @@ export function OptimizerFlowDialog({ open, onOpenChange, onComplete }: Optimize
           <Button className="w-full" onClick={() => handleConfirm(true)} disabled={!targetValid}>
             Require External Reco
           </Button>
-          <Button variant="outline" className="w-full" onClick={() => handleConfirm(false)} disabled={internalDisabled}>
-            Only Internal Optimization
-          </Button>
+          {showInternalOption && (
+            <Button variant="outline" className="w-full" onClick={() => handleConfirm(false)} disabled={internalDisabled}>
+              Only Internal Optimization
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

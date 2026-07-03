@@ -21,20 +21,17 @@ export function RecommendationItem({ reco, onAdjust }: RecommendationItemProps) 
   const currentValue = currentQty * price;
   const newValue = newQty * price;
   const step = reco.kind === "stock" ? 1 : Math.max(1, Math.round(currentQty * 0.01)) || 1;
+  const delta = newQty - currentQty;
 
   return (
     <div className="rounded-lg border border-border p-3">
-      <div className="mb-1.5 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium">
+          <p className={cn("text-sm font-medium", ACTION_STYLES[reco.action])}>
             {reco.name} {reco.external && <Badge variant="secondary" className="ml-1 px-1 py-0 text-[9px]">External</Badge>}
           </p>
           <p className="text-[11px] text-muted-foreground">{reco.symbol}</p>
         </div>
-        <span className={cn("text-xs font-bold uppercase", ACTION_STYLES[reco.action])}>{reco.action}</span>
-      </div>
-
-      <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button
             onClick={() => onAdjust(-step)}
@@ -43,28 +40,37 @@ export function RecommendationItem({ reco, onAdjust }: RecommendationItemProps) 
           >
             <Minus className="h-3 w-3" />
           </button>
-          <span className="min-w-[64px] text-center text-xs font-medium">
-            {currentQty} → {newQty}
-          </span>
+          {delta !== 0 && (
+            <span className={cn("min-w-[24px] text-center text-xs font-semibold", delta > 0 ? "text-success" : "text-destructive")}>
+              {delta > 0 ? "+" : ""}
+              {reco.kind === "stock" ? delta : delta.toFixed(2)}
+            </span>
+          )}
           <button onClick={() => onAdjust(step)} className="flex h-6 w-6 items-center justify-center rounded-full border border-border">
             <Plus className="h-3 w-3" />
           </button>
         </div>
-        {currentQty !== newQty && (
-          <span className={cn("text-[11px] font-medium", newQty > currentQty ? "text-success" : "text-destructive")}>
-            {newQty > currentQty ? "+" : ""}
-            {newQty - currentQty}
-          </span>
-        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-        <span>
-          {formatCurrency(currentValue)} → {formatCurrency(newValue)}
-        </span>
-        <span className="text-right">
-          {formatPercent(reco.currentAllocation)} → {formatPercent(reco.newAllocation)}
-        </span>
+      <div className="grid grid-cols-3 gap-2 text-[11px]">
+        <div>
+          <p className="text-muted-foreground">Qty</p>
+          <p className="font-medium">
+            {currentQty} → {newQty}
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Value</p>
+          <p className="font-medium">
+            {formatCurrency(currentValue)} → {formatCurrency(newValue)}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-muted-foreground">Allocation%</p>
+          <p className={cn("font-medium", ACTION_STYLES[reco.action])}>
+            {formatPercent(reco.currentAllocation)} → {formatPercent(reco.newAllocation)}
+          </p>
+        </div>
       </div>
     </div>
   );

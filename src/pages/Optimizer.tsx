@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import { Info } from "lucide-react";
+import { Info, Lock } from "lucide-react";
 import { MobileShell } from "@/components/layout/MobileShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,25 @@ export default function Optimizer() {
     rebalance.selectedInstruments.length > 0
       ? rebalance.selectedInstruments.reduce((sum, c) => sum + breakdown[c], 0)
       : aggregate.currentValue;
+
+  const consentGiven = !!rebalance.rebalanceScope;
+
+  if (!consentGiven) {
+    return (
+      <MobileShell>
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+            <Lock className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium">Complete the optimizer consent to continue</p>
+          <p className="max-w-xs text-xs text-muted-foreground">
+            Choose how you'd like your equity portfolio optimized to unlock your personalized recommendations.
+          </p>
+        </div>
+        <OptimizerFlowDialog open={flowOpen} onOpenChange={setFlowOpen} onComplete={() => {}} mandatory />
+      </MobileShell>
+    );
+  }
 
   return (
     <MobileShell>
@@ -128,7 +147,6 @@ export default function Optimizer() {
         </Card>
       </div>
 
-      <OptimizerFlowDialog open={flowOpen} onOpenChange={setFlowOpen} onComplete={() => {}} />
       <InvestmentModelsDialog open={modelsOpen} onOpenChange={setModelsOpen} />
       <DrilldownPieChart open={drilldownOpen} onOpenChange={setDrilldownOpen} stocks={stocks} mutualFunds={mutualFunds} />
 
