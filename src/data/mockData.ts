@@ -153,8 +153,8 @@ export const userHoldings: Fund[] = [
   },
   {
     id: 'h8',
-    fundName: 'Franklin India Mid Cap Fund - Regular Growth',
-    subCategory: 'Mid Cap',
+    fundName: 'Franklin India Small Cap Fund - Regular Growth',
+    subCategory: 'Small Cap',
     option: 'Growth',
     plan: 'Regular',
     geojitRating: 2,

@@ -1,51 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { userHoldings, fundUniverse } from '../data/mockData';
 import { getRatingTier, getTierColor, formatINR } from '../utils/formatters';
-import { FundCard } from '../components/FundCard';
-import type { Fund, RatingTier, RebalancingModel } from '../types/rebalancer';
-import { getReplacements } from '../utils/breEngine';
+import type { Fund, RatingTier, RebalancingModel, GroupBreResult } from '../types/rebalancer';
+import { getGroupReplacements, MODEL_METRICS } from '../utils/breEngine';
 import { useRebalancerStore } from '../store/rebalancerStore';
-import { ArrowLeft, Info, ChevronRight, Zap, X } from 'lucide-react';
+import { ArrowLeft, Info, ChevronRight, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { StarRating } from '../components/ui/StarRating';
 
 const TIERS: RatingTier[] = ['Highly Rated', 'Moderately Rated', 'Need Attention', 'Not Rated'];
-
-interface ModelInfo {
-  model: RebalancingModel;
-  subtitle: string;
-  description: string;
-  detail: string;
-  color: string;
-  icon: string;
-}
-
-const MODEL_INFO: ModelInfo[] = [
-  {
-    model: 'Smart Alpha',
-    subtitle: 'Aggressive Growth',
-    description: 'Concentrates 70% in the highest-rated fund. Best for aggressive growth seekers.',
-    detail: 'Allocates 70% to the top-rated replacement, 20% to the second, and 10% to the third. Maximises potential upside but concentrates risk in fewer funds.',
-    color: '#dc2626',
-    icon: '🎯',
-  },
-  {
-    model: 'Balanced Beta',
-    subtitle: 'Risk Balanced',
-    description: 'Splits equally across all suggested replacements. Ideal for balanced risk-takers.',
-    detail: 'Divides your switch amount equally among all replacement funds. Reduces concentration risk while still moving to better-rated alternatives.',
-    color: '#ea580c',
-    icon: '⚖️',
-  },
-  {
-    model: 'Research Driven',
-    subtitle: 'Data Backed',
-    description: 'Weights funds by 3-year CAGR performance. Suited for data-driven investors.',
-    detail: "Allocates proportionally based on each fund's 3-year CAGR. Funds with stronger track records receive a larger share of the switch amount.",
-    color: '#1d4ed8',
-    icon: '📊',
-  },
-];
 
 export function FundRatingInsights() {
   const navigate = useNavigate();
@@ -53,54 +17,63 @@ export function FundRatingInsights() {
   const locationState = location.state as { tab?: RatingTier } | null;
 
   const [activeTab, setActiveTab] = useState<RatingTier>(locationState?.tab ?? 'Highly Rated');
-  const [showModelModal, setShowModelModal] = useState(false);
-  const [expandedModelInfo, setExpandedModelInfo] = useState<RebalancingModel | null>(null);
-  const { selectedModel, setSelectedModel, setBreResults } = useRebalancerStore();
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const { selectedModel, setSelectedModel, setGroupBreResults } = useRebalancerStore();
 
   const needAttentionFunds = userHoldings.filter(f => getRatingTier(f) === 'Need Attention');
-
-  useEffect(() => {
-    if (activeTab === 'Need Attention' && !selectedModel) {
-      setShowModelModal(true);
-    }
-  }, [activeTab, selectedModel]);
 
   const tierGroups = TIERS.map(tier => ({
     tier,
     funds: userHoldings.filter(f => getRatingTier(f) === tier),
   })).filter(g => g.funds.length > 0);
 
-  const handleSelectModel = (model: RebalancingModel) => {
-    setSelectedModel(model);
-    setShowModelModal(false);
-    setExpandedModelInfo(null);
-    const results = needAttentionFunds.map(f => ({
-      sourceFundId: f.id,
-      replacements: getReplacements(f, fundUniverse, userHoldings),
-    }));
-    setBreResults(results);
+  const needAttentionSubGroups = useMemo(() => {
+    const map = new Map<string, Fund[]>();
+    needAttentionFunds.forEach(f => {
+      const existing = map.get(f.subCategory) ?? [];
+      map.set(f.subCategory, [...existing, f]);
+    });
+    return Array.from(map.entries()).map(([subCategory, funds]) => {
+      const replacements = getGroupReplacements(funds, fundUniverse, userHoldings);
+      return { subCategory, funds, replacements };
+    });
+  }, []);
+
+  const activeFunds = tierGroups.find(g => g.tier === activeTab)?.funds ?? [];
+
+  const activeSubGroups = useMemo(() => {
+    const map = new Map<string, Fund[]>();
+    activeFunds.forEach(f => {
+      const existing = map.get(f.subCategory) ?? [];
+      map.set(f.subCategory, [...existing, f]);
+    });
+    return Array.from(map.entries()).map(([subCategory, funds]) => ({ subCategory, funds }));
+  }, [activeFunds]);
+
+  const totalHolding = userHoldings.reduce((s, f) => s + f.holdingValue, 0);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
-  const handleSwitchFund = (fund: Fund) => {
-    const results = [{
-      sourceFundId: fund.id,
-      replacements: getReplacements(fund, fundUniverse, userHoldings),
-    }];
-    setBreResults(results);
-    navigate('/switch-options', { state: { sourceFundId: fund.id } });
+  const handleSelectModel = (model: RebalancingModel) => {
+    setSelectedModel(model);
+    const results: GroupBreResult[] = needAttentionSubGroups.map(({ subCategory, funds, replacements }) => ({
+      subCategory,
+      sourceFundIds: funds.map(f => f.id),
+      replacements,
+    }));
+    setGroupBreResults(results);
   };
 
   const handleRebalanceAll = () => {
-    const results = needAttentionFunds.map(f => ({
-      sourceFundId: f.id,
-      replacements: getReplacements(f, fundUniverse, userHoldings),
-    }));
-    setBreResults(results);
-    navigate('/rebalance-consent');
+    navigate('/rebalance-confirm', { state: { groupMode: true } });
   };
-
-  const activeFunds = tierGroups.find(g => g.tier === activeTab)?.funds ?? [];
-  const totalHolding = userHoldings.reduce((s, f) => s + f.holdingValue, 0);
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
@@ -150,19 +123,6 @@ export function FundRatingInsights() {
         </div>
       </div>
 
-      {/* Need Attention model bar */}
-      {activeTab === 'Need Attention' && selectedModel && (
-        <div className="mx-4 mt-3 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex items-center gap-2">
-          <Zap size={14} className="text-red-600 flex-shrink-0" />
-          <span className="text-xs text-red-700 flex-1">
-            Model: <span className="font-bold">{selectedModel}</span>
-          </span>
-          <button onClick={() => setShowModelModal(true)} className="text-xs text-red-600 font-semibold underline">
-            Change
-          </button>
-        </div>
-      )}
-
       {/* Summary stats */}
       {activeFunds.length > 0 && (
         <div className="mx-4 mt-3 bg-white rounded-xl p-3 border border-gray-100 shadow-sm">
@@ -187,17 +147,189 @@ export function FundRatingInsights() {
         </div>
       )}
 
-      {/* Fund cards */}
-      <div className="flex-1 px-4 mt-3 space-y-3">
-        {activeFunds.map(fund => (
-          <FundCard
-            key={fund.id}
-            fund={fund}
-            tier={activeTab}
-            showSwitchButton={activeTab === 'Need Attention'}
-            onSwitch={handleSwitchFund}
-          />
-        ))}
+      {/* Inline model selector — Need Attention only */}
+      {activeTab === 'Need Attention' && (
+        <div className="mx-4 mt-3 bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+          <p className="text-xs font-bold text-gray-700 mb-3">Pick the model best suited for you</p>
+          <div className="flex gap-2">
+            {(['Smart Alpha', 'Balanced Beta', 'Research Driven'] as RebalancingModel[]).map(model => (
+              <button
+                key={model}
+                onClick={() => handleSelectModel(model)}
+                className={cn(
+                  'flex-1 py-2 px-2 rounded-xl text-[11px] font-semibold transition-all border',
+                  selectedModel === model
+                    ? 'bg-[#1e3a8a] text-white border-[#1e3a8a] shadow-sm'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                )}
+              >
+                {model}
+              </button>
+            ))}
+          </div>
+          {selectedModel && (
+            <div className="mt-3 grid grid-cols-3 gap-2 pt-3 border-t border-gray-100">
+              {[
+                { label: 'Expected Returns', value: `${MODEL_METRICS[selectedModel].returns}%` },
+                { label: 'Volatility Rate', value: `${MODEL_METRICS[selectedModel].volatility}%` },
+                { label: 'Sharpe Ratio', value: `${MODEL_METRICS[selectedModel].sharpe}` },
+              ].map(({ label, value }) => (
+                <div key={label} className="text-center">
+                  <p className="text-[9px] text-gray-400 leading-tight">{label}</p>
+                  <p className="text-sm font-bold text-blue-700 mt-0.5">{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sub-category accordion groups */}
+      <div className="flex-1 px-4 mt-3 space-y-2">
+        {activeTab === 'Need Attention'
+          ? needAttentionSubGroups.map(({ subCategory, funds, replacements }) => {
+              const key = `na-${subCategory}`;
+              const isOpen = expandedGroups.has(key);
+              const totalVal = funds.reduce((s, f) => s + f.holdingValue, 0);
+              return (
+                <div key={key} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  {/* Collapsed header */}
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+                    onClick={() => toggleGroup(key)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-gray-900">{subCategory}</p>
+                        {replacements.length > 0 && (
+                          <span className="text-[10px] bg-green-50 text-green-700 font-semibold px-2 py-0.5 rounded-full border border-green-100">
+                            {replacements.length} alternatives
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {funds.length} fund{funds.length > 1 ? 's' : ''} · {formatINR(totalVal)}
+                      </p>
+                    </div>
+                    {isOpen
+                      ? <ChevronUp size={16} className="text-gray-400 flex-shrink-0" />
+                      : <ChevronDown size={16} className="text-gray-400 flex-shrink-0" />
+                    }
+                  </button>
+
+                  {/* Expanded content */}
+                  {isOpen && (
+                    <div className="border-t border-gray-50 px-4 pt-3 pb-4 space-y-3 bg-gray-50/40">
+                      {/* Going out */}
+                      <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Going Out</p>
+                      <div className="space-y-2">
+                        {funds.map(f => (
+                          <div key={f.id} className="bg-red-50 rounded-xl p-3 flex items-center gap-3">
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                              style={{ backgroundColor: f.amcColor }}
+                            >
+                              {f.amcInitials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-800 truncate">{f.fundName}</p>
+                              <StarRating rating={f.geojitRating} size={9} />
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-xs font-bold text-brand-red">{formatINR(f.holdingValue)}</p>
+                              <p className="text-[9px] text-gray-400">{parseFloat((f.holdingValue / (f.nav ?? 100)).toFixed(3))} units</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Coming in */}
+                      {replacements.length > 0 && (
+                        <>
+                          <p className="text-[10px] font-bold text-green-600 uppercase tracking-wider pt-1">Coming In</p>
+                          <div className="space-y-2">
+                            {replacements.map(rep => (
+                              <div key={rep.id} className="bg-green-50 rounded-xl p-3 flex items-center gap-3">
+                                <div
+                                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                                  style={{ backgroundColor: rep.amcColor }}
+                                >
+                                  {rep.amcInitials}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-gray-800 truncate">{rep.fundName}</p>
+                                  <StarRating rating={rep.geojitRating} size={9} />
+                                </div>
+                                {rep.badge && (
+                                  <span className={cn(
+                                    'text-[9px] px-1.5 py-0.5 rounded font-bold flex-shrink-0',
+                                    rep.badge === 'Gold' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
+                                  )}>{rep.badge}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          : activeSubGroups.map(({ subCategory, funds }) => {
+              const key = `${activeTab}-${subCategory}`;
+              const isOpen = expandedGroups.has(key);
+              const totalVal = funds.reduce((s, f) => s + f.holdingValue, 0);
+              return (
+                <div key={key} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+                    onClick={() => toggleGroup(key)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900">{subCategory}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {funds.length} fund{funds.length > 1 ? 's' : ''} · {formatINR(totalVal)}
+                      </p>
+                    </div>
+                    {isOpen
+                      ? <ChevronUp size={16} className="text-gray-400 flex-shrink-0" />
+                      : <ChevronDown size={16} className="text-gray-400 flex-shrink-0" />
+                    }
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-gray-50 px-4 pt-3 pb-4 space-y-2 bg-gray-50/40">
+                      {funds.map(f => {
+                        const pnl = f.holdingValue - f.investedValue;
+                        const pnlPct = f.investedValue > 0 ? ((pnl / f.investedValue) * 100).toFixed(1) : '0.0';
+                        return (
+                          <div key={f.id} className="bg-white rounded-xl p-3 flex items-center gap-3 border border-gray-100">
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                              style={{ backgroundColor: f.amcColor }}
+                            >
+                              {f.amcInitials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-800 truncate">{f.fundName}</p>
+                              <StarRating rating={f.geojitRating} size={9} />
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-xs font-bold text-gray-800">{formatINR(f.holdingValue)}</p>
+                              <p className={cn('text-[9px] font-medium', pnl >= 0 ? 'text-green-600' : 'text-red-500')}>
+                                {pnl >= 0 ? '+' : ''}{pnlPct}%
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+        }
         {activeFunds.length === 0 && (
           <div className="text-center py-12">
             <p className="text-gray-400 text-sm">No funds in this category</p>
@@ -209,114 +341,25 @@ export function FundRatingInsights() {
       {activeTab === 'Need Attention' && needAttentionFunds.length > 0 && (
         <div className="sticky bottom-20 px-4 pb-3 pt-2 bg-gradient-to-t from-gray-100 via-gray-100/90 to-transparent">
           <button
-            onClick={handleRebalanceAll}
-            className="w-full flex items-center justify-center gap-2 bg-brand-red text-white font-bold py-3.5 rounded-2xl shadow-lg hover:bg-red-700 active:scale-[0.98] transition-all"
+            onClick={selectedModel ? handleRebalanceAll : undefined}
+            disabled={!selectedModel}
+            className={cn(
+              'w-full flex items-center justify-center gap-2 font-bold py-3.5 rounded-2xl shadow-lg transition-all',
+              selectedModel
+                ? 'bg-brand-red text-white hover:bg-red-700 active:scale-[0.98]'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            )}
           >
-            <Zap size={16} />
-            Rebalance All {needAttentionFunds.length} Funds
-            <ChevronRight size={16} />
+            {selectedModel ? (
+              <>
+                <Zap size={16} />
+                Rebalance All {needAttentionFunds.length} Funds
+                <ChevronRight size={16} />
+              </>
+            ) : (
+              <>Select a Model First</>
+            )}
           </button>
-        </div>
-      )}
-
-      {/* Model Selection Modal — CENTER overlay */}
-      {showModelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => selectedModel && setShowModelModal(false)}
-          />
-          <div className="relative w-full max-w-[400px] bg-white rounded-3xl p-5 shadow-2xl">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-base font-bold text-gray-900">Choose Rebalancing Model</h2>
-              {selectedModel && (
-                <button
-                  onClick={() => setShowModelModal(false)}
-                  className="p-1 rounded-full hover:bg-gray-100"
-                >
-                  <X size={18} className="text-gray-500" />
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mb-4">
-              Applies to all funds. Tap <Info size={11} className="inline" /> for details on each model.
-            </p>
-
-            <div className="space-y-2.5">
-              {MODEL_INFO.map(({ model, subtitle, description, detail, color, icon }) => {
-                const isSelected = selectedModel === model;
-                const isExpanded = expandedModelInfo === model;
-                return (
-                  <div
-                    key={model}
-                    className={cn(
-                      'rounded-2xl border-2 transition-all overflow-hidden',
-                      isSelected ? 'shadow-sm' : 'border-gray-100'
-                    )}
-                    style={isSelected ? { borderColor: color, backgroundColor: color + '08' } : {}}
-                  >
-                    {/* Main row */}
-                    <div className="flex items-start gap-3 p-3 cursor-pointer" onClick={() => handleSelectModel(model)}>
-                      <div
-                        className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                        style={{ backgroundColor: color + '18' }}
-                      >
-                        {icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-sm font-bold text-gray-900">{model}</p>
-                          <span
-                            className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold text-white"
-                            style={{ backgroundColor: color }}
-                          >
-                            {subtitle}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{description}</p>
-                      </div>
-                      {/* Info icon */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedModelInfo(isExpanded ? null : model);
-                        }}
-                        className={cn(
-                          'flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5 transition-colors',
-                          isExpanded ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                        )}
-                      >
-                        <Info size={12} />
-                      </button>
-                    </div>
-
-                    {/* Expanded detail */}
-                    {isExpanded && (
-                      <div className="px-3 pb-2 -mt-1">
-                        <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
-                          <p className="text-xs text-blue-800 leading-relaxed">{detail}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Select button */}
-                    <div className="px-3 pb-3">
-                      <button
-                        onClick={() => handleSelectModel(model)}
-                        className={cn(
-                          'w-full py-2 rounded-xl text-xs font-bold transition-all',
-                          isSelected ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        )}
-                        style={isSelected ? { backgroundColor: color } : {}}
-                      >
-                        {isSelected ? '✓ Selected' : 'Select this model'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </div>
       )}
     </div>

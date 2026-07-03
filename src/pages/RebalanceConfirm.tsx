@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useRebalancerStore } from '../store/rebalancerStore';
 import { userHoldings, fundUniverse } from '../data/mockData';
 import { formatINR } from '../utils/formatters';
 import { StarRating } from '../components/ui/StarRating';
-import { getModelAllocations } from '../utils/breEngine';
+import { getModelAllocations, getGroupModelAllocations } from '../utils/breEngine';
 import {
   ArrowLeft, CheckCircle2, ArrowRight, Loader2, PartyPopper,
   Zap, Clock, Info, ChevronDown, ChevronUp,
@@ -14,7 +14,10 @@ import type { Fund, OrderMode } from '../types/rebalancer';
 
 export function RebalanceConfirm() {
   const navigate = useNavigate();
-  const { breResults, selectedFundsForSwitch, selectedModel, modelUnits, reset } = useRebalancerStore();
+  const location = useLocation();
+  const isGroupMode = (location.state as { groupMode?: boolean } | null)?.groupMode ?? false;
+
+  const { breResults, selectedFundsForSwitch, selectedModel, modelUnits, groupBreResults, reset } = useRebalancerStore();
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [orderMode, setOrderMode] = useState<OrderMode | null>(null);
@@ -26,12 +29,23 @@ export function RebalanceConfirm() {
   const getReplacementFund = (id: string): Fund | undefined =>
     fundUniverse.find(f => f.id === id);
 
-  const totalRedemptionValue = selectedResults.reduce((s, r) => {
-    const f = userHoldings.find(h => h.id === r.sourceFundId);
-    return s + (f?.holdingValue ?? 0);
-  }, 0);
+  const totalRedemptionValue = isGroupMode
+    ? groupBreResults.reduce((s, gr) => s + gr.sourceFundIds.reduce((sv, id) => {
+        const f = userHoldings.find(h => h.id === id);
+        return sv + (f?.holdingValue ?? 0);
+      }, 0), 0)
+    : selectedResults.reduce((s, r) => {
+        const f = userHoldings.find(h => h.id === r.sourceFundId);
+        return s + (f?.holdingValue ?? 0);
+      }, 0);
 
-  const totalBuyOrders = selectedResults.reduce((s, r) => s + r.replacements.length, 0);
+  const totalBuyOrders = isGroupMode
+    ? groupBreResults.reduce((s, gr) => s + gr.replacements.length, 0)
+    : selectedResults.reduce((s, r) => s + r.replacements.length, 0);
+
+  const totalSellOrders = isGroupMode
+    ? groupBreResults.reduce((s, gr) => s + gr.sourceFundIds.length, 0)
+    : selectedResults.length;
 
   const handleConfirm = async () => {
     if (!orderMode) return;
@@ -70,7 +84,7 @@ export function RebalanceConfirm() {
           <p className="text-xs font-bold text-gray-700 mb-2">Order Summary</p>
           <div className="flex justify-between">
             <span className="text-xs text-gray-500">Sell orders</span>
-            <span className="text-xs font-bold text-red-600">{selectedResults.length}</span>
+            <span className="text-xs font-bold text-red-600">{totalSellOrders}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-xs text-gray-500">Buy orders</span>
@@ -98,6 +112,8 @@ export function RebalanceConfirm() {
     );
   }
 
+  const modelToUse = selectedModel ?? 'Balanced Beta';
+
   return (
     <div className="flex flex-col min-h-screen pb-56 bg-gray-50">
       {/* Header */}
@@ -116,7 +132,7 @@ export function RebalanceConfirm() {
       <div className="px-4 py-4 space-y-4">
         {/* Step indicator */}
         <div className="flex items-center gap-2">
-          {['Select', 'Consent', 'Confirm'].map((step, i) => (
+          {['Select', 'Model', 'Confirm'].map((step, i) => (
             <div key={step} className="flex items-center gap-1.5 flex-1">
               <div className={cn(
                 'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
@@ -133,122 +149,236 @@ export function RebalanceConfirm() {
         {/* Summary chips */}
         <div className="flex gap-2 flex-wrap">
           <div className="bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs font-semibold text-gray-700">
-            🔄 Switching {selectedResults.length} fund{selectedResults.length > 1 ? 's' : ''}
+            🔄 Selling {totalSellOrders} fund{totalSellOrders > 1 ? 's' : ''}
           </div>
           <div className="bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs font-semibold text-gray-700">
             💰 {formatINR(totalRedemptionValue)}
           </div>
           <div className="bg-white border border-gray-200 rounded-full px-3 py-1.5 text-xs font-semibold text-gray-700">
-            📋 {selectedResults.length + totalBuyOrders} orders
+            📋 {totalSellOrders + totalBuyOrders} orders
           </div>
         </div>
 
-        {/* Switch pairs */}
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Switch Orders</p>
-          <div className="space-y-3">
-            {selectedResults.map(result => {
-              const sourceFund = userHoldings.find(f => f.id === result.sourceFundId);
-              if (!sourceFund) return null;
-              const sourceNav = sourceFund.nav ?? 100;
-              const units = parseFloat((sourceFund.holdingValue / sourceNav).toFixed(3));
-              const modelToUse = selectedModel ?? 'Balanced Beta';
-              const defaultAlloc = getModelAllocations(result.replacements, modelToUse, Math.round(units * 1000));
-              const isExpanded = expandedRow === result.sourceFundId;
+        {/* ── GROUP MODE TABLE VIEW ─────────────────── */}
+        {isGroupMode && groupBreResults.length > 0 ? (
+          <div className="space-y-4">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rebalancing Summary</p>
+            {groupBreResults.map(gr => {
+              const sourceFunds = gr.sourceFundIds
+                .map(id => userHoldings.find(f => f.id === id))
+                .filter(Boolean) as Fund[];
+              const allocs = getGroupModelAllocations(sourceFunds, gr.replacements, modelToUse);
+              const totalVal = sourceFunds.reduce((s, f) => s + f.holdingValue, 0);
 
               return (
-                <div key={result.sourceFundId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  {/* Collapsed header */}
-                  <button
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left"
-                    onClick={() => setExpandedRow(isExpanded ? null : result.sourceFundId)}
-                  >
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                      style={{ backgroundColor: sourceFund.amcColor }}
+                <div key={gr.subCategory} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  {/* Sub-category header */}
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <p className="text-sm font-bold text-gray-900">{gr.subCategory}</p>
+                    <p className="text-xs font-semibold text-gray-500">{formatINR(totalVal)}</p>
+                  </div>
+
+                  {/* Horizontal scroll table */}
+                  <div className="overflow-x-auto">
+                    <table
+                      className="text-xs border-collapse"
+                      style={{ minWidth: `${(sourceFunds.length + gr.replacements.length + 1) * 100}px` }}
                     >
-                      {sourceFund.amcInitials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-gray-900 truncate">{sourceFund.fundName}</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">
-                        Sell {units.toFixed(3)} units → {result.replacements.length} buy order{result.replacements.length > 1 ? 's' : ''}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-bold text-brand-red">{formatINR(sourceFund.holdingValue)}</p>
-                      {isExpanded ? <ChevronUp size={14} className="text-gray-400 ml-auto mt-0.5" /> : <ChevronDown size={14} className="text-gray-400 ml-auto mt-0.5" />}
-                    </div>
-                  </button>
-
-                  {/* Expanded detail */}
-                  {isExpanded && (
-                    <div className="border-t border-gray-50 px-4 py-3 space-y-3 bg-gray-50/50">
-                      {/* Sell row */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">REDEEM</span>
-                        <span className="text-xs text-gray-600 flex-1 truncate">{sourceFund.fundName}</span>
-                        <span className="text-xs font-bold text-gray-800">{units.toFixed(3)} units</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] text-gray-400 ml-1">
-                        <span>NAV ₹{sourceNav.toFixed(4)}</span>
-                        <span>•</span>
-                        <span>Value {formatINR(sourceFund.holdingValue)}</span>
-                      </div>
-
-                      {/* Buy rows */}
-                      <div className="flex items-center gap-2 ml-1">
-                        <ArrowRight size={12} className="text-brand-green" />
-                        <span className="text-[10px] font-bold text-green-700">Purchase Orders</span>
-                      </div>
-                      {result.replacements.map(rep => {
-                        const fund = getReplacementFund(rep.id);
-                        if (!fund) return null;
-                        const repUnits = parseFloat(((modelUnits[sourceFund.id]?.[fund.id] ?? (defaultAlloc[fund.id] ?? 0)) / 1000).toFixed(3));
-                        const fundNav = fund.nav ?? 100;
-                        return (
-                          <div key={fund.id} className="bg-white rounded-xl p-3 border border-green-100">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
-                                style={{ backgroundColor: fund.amcColor }}
-                              >
-                                {fund.amcInitials}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold text-gray-900 truncate">{fund.fundName}</p>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  <StarRating rating={fund.geojitRating} size={9} />
-                                  {fund.badge && (
-                                    <span className={cn(
-                                      'text-[9px] px-1 py-0.5 rounded font-bold',
-                                      fund.badge === 'Gold' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
-                                    )}>{fund.badge}</span>
-                                  )}
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase w-16 whitespace-nowrap"></th>
+                          {sourceFunds.map(f => (
+                            <th key={f.id} className="px-3 py-2 text-center min-w-[100px]">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-[9px] bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">Current</span>
+                                <div
+                                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
+                                  style={{ backgroundColor: f.amcColor }}
+                                >
+                                  {f.amcInitials}
                                 </div>
+                                <p className="text-[9px] text-gray-600 font-semibold leading-tight text-center max-w-[80px]">
+                                  {f.fundName.split(' ').slice(0, 3).join(' ')}
+                                </p>
                               </div>
-                              <div className="text-right">
-                                <p className="text-xs font-bold text-green-700">{repUnits.toFixed(3)} units</p>
-                                <p className="text-[9px] text-gray-400">NAV ₹{fundNav.toFixed(4)}</p>
+                            </th>
+                          ))}
+                          {gr.replacements.map(rep => (
+                            <th key={rep.id} className="px-3 py-2 text-center min-w-[100px]">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-[9px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">New</span>
+                                <div
+                                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
+                                  style={{ backgroundColor: rep.amcColor }}
+                                >
+                                  {rep.amcInitials}
+                                </div>
+                                <p className="text-[9px] text-gray-600 font-semibold leading-tight text-center max-w-[80px]">
+                                  {rep.fundName.split(' ').slice(0, 3).join(' ')}
+                                </p>
                               </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* Qty row */}
+                        <tr className="border-b border-gray-50">
+                          <td className="px-3 py-2.5 text-[10px] font-bold text-gray-500 whitespace-nowrap">Qty</td>
+                          {sourceFunds.map(f => (
+                            <td key={f.id} className="px-3 py-2.5 text-center">
+                              <p className="text-xs font-bold text-red-600">
+                                {parseFloat((f.holdingValue / (f.nav ?? 100)).toFixed(3))}
+                              </p>
+                              <p className="text-[9px] text-gray-400">units</p>
+                            </td>
+                          ))}
+                          {gr.replacements.map(rep => (
+                            <td key={rep.id} className="px-3 py-2.5 text-center">
+                              <p className="text-xs font-bold text-green-700">
+                                {(allocs[rep.id]?.units ?? 0).toFixed(3)}
+                              </p>
+                              <p className="text-[9px] text-gray-400">units</p>
+                            </td>
+                          ))}
+                        </tr>
+                        {/* Value row */}
+                        <tr>
+                          <td className="px-3 py-2.5 text-[10px] font-bold text-gray-500 whitespace-nowrap">Value</td>
+                          {sourceFunds.map(f => (
+                            <td key={f.id} className="px-3 py-2.5 text-center">
+                              <p className="text-xs font-bold text-red-600">{formatINR(f.holdingValue)}</p>
+                            </td>
+                          ))}
+                          {gr.replacements.map(rep => (
+                            <td key={rep.id} className="px-3 py-2.5 text-center">
+                              <p className="text-xs font-bold text-green-700">{formatINR(allocs[rep.id]?.value ?? 0)}</p>
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Star ratings row */}
+                  <div className="px-4 py-2 border-t border-gray-50 flex gap-3">
+                    {sourceFunds.map(f => (
+                      <div key={f.id} className="flex-1 flex justify-center">
+                        <StarRating rating={f.geojitRating} size={8} />
+                      </div>
+                    ))}
+                    {gr.replacements.map(rep => (
+                      <div key={rep.id} className="flex-1 flex justify-center">
+                        <StarRating rating={rep.geojitRating} size={8} />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        ) : (
+          /* ── INDIVIDUAL MODE — original switch pairs ─── */
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Switch Orders</p>
+            <div className="space-y-3">
+              {selectedResults.map(result => {
+                const sourceFund = userHoldings.find(f => f.id === result.sourceFundId);
+                if (!sourceFund) return null;
+                const sourceNav = sourceFund.nav ?? 100;
+                const units = parseFloat((sourceFund.holdingValue / sourceNav).toFixed(3));
+                const defaultAlloc = getModelAllocations(result.replacements, modelToUse, Math.round(units * 1000));
+                const isExpanded = expandedRow === result.sourceFundId;
+
+                return (
+                  <div key={result.sourceFundId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <button
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                      onClick={() => setExpandedRow(isExpanded ? null : result.sourceFundId)}
+                    >
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                        style={{ backgroundColor: sourceFund.amcColor }}
+                      >
+                        {sourceFund.amcInitials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-900 truncate">{sourceFund.fundName}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          Sell {units.toFixed(3)} units → {result.replacements.length} buy order{result.replacements.length > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-bold text-brand-red">{formatINR(sourceFund.holdingValue)}</p>
+                        {isExpanded ? <ChevronUp size={14} className="text-gray-400 ml-auto mt-0.5" /> : <ChevronDown size={14} className="text-gray-400 ml-auto mt-0.5" />}
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-gray-50 px-4 py-3 space-y-3 bg-gray-50/50">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">REDEEM</span>
+                          <span className="text-xs text-gray-600 flex-1 truncate">{sourceFund.fundName}</span>
+                          <span className="text-xs font-bold text-gray-800">{units.toFixed(3)} units</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400 ml-1">
+                          <span>NAV ₹{sourceNav.toFixed(4)}</span>
+                          <span>•</span>
+                          <span>Value {formatINR(sourceFund.holdingValue)}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 ml-1">
+                          <ArrowRight size={12} className="text-brand-green" />
+                          <span className="text-[10px] font-bold text-green-700">Purchase Orders</span>
+                        </div>
+                        {result.replacements.map(rep => {
+                          const fund = getReplacementFund(rep.id);
+                          if (!fund) return null;
+                          const repUnits = parseFloat(((modelUnits[sourceFund.id]?.[fund.id] ?? (defaultAlloc[fund.id] ?? 0)) / 1000).toFixed(3));
+                          const fundNav = fund.nav ?? 100;
+                          return (
+                            <div key={fund.id} className="bg-white rounded-xl p-3 border border-green-100">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+                                  style={{ backgroundColor: fund.amcColor }}
+                                >
+                                  {fund.amcInitials}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-gray-900 truncate">{fund.fundName}</p>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <StarRating rating={fund.geojitRating} size={9} />
+                                    {fund.badge && (
+                                      <span className={cn(
+                                        'text-[9px] px-1 py-0.5 rounded font-bold',
+                                        fund.badge === 'Gold' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
+                                      )}>{fund.badge}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-bold text-green-700">{repUnits.toFixed(3)} units</p>
+                                  <p className="text-[9px] text-gray-400">NAV ₹{fundNav.toFixed(4)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── ORDER MODE SELECTION ─────────────────── */}
         <div>
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">How to Place Orders</p>
           <div className="space-y-2.5">
 
-            {/* Option 1 — Instant with broker credit */}
             <div
               className={cn(
                 'bg-white rounded-2xl border-2 p-4 cursor-pointer transition-all',
@@ -288,7 +418,7 @@ export function RebalanceConfirm() {
                   {showModeInfo === 'instant_credit' && (
                     <div className="mt-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
                       <p className="text-[10px] text-blue-800 leading-relaxed">
-                        Your broker extends a short-term credit line (similar to a margin facility) equal to the redemption amount. This lets you buy the new funds immediately without waiting for the sold units to settle. The credit is automatically squared off when settlement completes (T+2 to T+3 business days). Interest may apply for the credit period — check with your broker.
+                        Your broker extends a short-term credit line equal to the redemption amount. This lets you buy the new funds immediately without waiting for the sold units to settle. The credit is automatically squared off when settlement completes (T+2 to T+3 business days).
                       </p>
                     </div>
                   )}
@@ -296,7 +426,6 @@ export function RebalanceConfirm() {
               </div>
             </div>
 
-            {/* Option 2 — Wait for settlement */}
             <div
               className={cn(
                 'bg-white rounded-2xl border-2 p-4 cursor-pointer transition-all',
@@ -336,7 +465,7 @@ export function RebalanceConfirm() {
                   {showModeInfo === 'wait_settlement' && (
                     <div className="mt-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
                       <p className="text-[10px] text-blue-800 leading-relaxed">
-                        Your sell (redemption) orders are placed immediately at today's NAV. The proceeds from the redemption typically settle in 2–3 business days. Once the money is credited to your account, the queued buy orders will automatically execute at the NAV on that date. This avoids any credit cost but means you'll be out of the market for 2–3 days.
+                        Your sell orders are placed immediately at today's NAV. The proceeds typically settle in 2–3 business days. Once credited, the queued buy orders will automatically execute. This avoids any credit cost but means you'll be out of the market for 2–3 days.
                       </p>
                     </div>
                   )}

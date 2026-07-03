@@ -45,6 +45,12 @@ export interface ModelAllocation {
   units: Record<string, number>; // replacementFundId -> units
 }
 
+export interface GroupBreResult {
+  subCategory: string;
+  sourceFundIds: string[];
+  replacements: Fund[];
+}
+
 export interface ConsentState {
   consentGiven: boolean;
   selectedModel: RebalancingModel | null;
