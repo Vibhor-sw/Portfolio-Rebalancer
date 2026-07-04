@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChatMessageBubble } from "@/components/whatif/ChatMessage";
 import { TypingIndicator } from "@/components/whatif/TypingIndicator";
-import { WHATIF_QUESTIONS } from "@/lib/whatif/questions";
+import { getContextualQuestions } from "@/lib/whatif/questions";
 import { generateWhatIfResponse } from "@/lib/whatif/engine";
 import type { ChatMessage, WhatIfAction } from "@/lib/whatif/types";
 import { usePortfolio } from "@/contexts/PortfolioContext";
 import { useHoldings } from "@/contexts/HoldingsContext";
 import { useRebalance } from "@/contexts/RebalanceContext";
+import { generateRecommendations } from "@/lib/portfolio";
 import { INVESTMENT_MODELS } from "@/lib/mockData";
 import type { ModelKey } from "@/lib/types";
 
@@ -25,6 +26,12 @@ export default function WhatIf() {
 
   const { stocks, mutualFunds } = holdings[selectedPortfolio];
   const model = INVESTMENT_MODELS.find((m) => m.key === rebalance.selectedModel) ?? INVESTMENT_MODELS[0];
+
+  const { stockRecos, mfRecos } = generateRecommendations(stocks, mutualFunds, model, {
+    additionalCash: rebalance.additionalCash,
+    qtyAdjustments: rebalance.qtyAdjustments,
+  });
+  const suggestedQuestions = getContextualQuestions(stockRecos, mfRecos, model.key);
 
   const [mode, setMode] = React.useState<"landing" | "chat">("landing");
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
@@ -92,16 +99,18 @@ export default function WhatIf() {
               </div>
               <p className="text-base font-bold">WhatIf Simulator</p>
               <p className="text-xs opacity-90">
-                Ask any what-if question about your portfolio — sector shifts, risk profile changes, or adding
+                Ask any what-if question about your rebalanced mix — sector shifts, risk profile changes, or adding
                 fresh capital — and see the simulated impact instantly.
               </p>
             </CardContent>
           </Card>
 
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Try asking</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Based on your rebalanced mix
+            </p>
             <div className="space-y-2">
-              {WHATIF_QUESTIONS.map((q) => (
+              {suggestedQuestions.map((q) => (
                 <button
                   key={q}
                   onClick={() => sendMessage(q)}
