@@ -57,20 +57,23 @@ export function getGroupModelAllocations(
 
   const rupeeAllocs: Record<string, number> = {};
   if (model === 'Smart Alpha') {
+    // Concentrated — commits the entire switch value to the single top-rated replacement
     const sorted = [...replacements].sort((a, b) => getRatingPriority(b) - getRatingPriority(a));
-    rupeeAllocs[sorted[0].id] = totalValue * 0.7;
-    if (sorted[1]) rupeeAllocs[sorted[1].id] = totalValue * 0.2;
-    if (sorted[2]) rupeeAllocs[sorted[2].id] = totalValue * 0.1;
+    rupeeAllocs[sorted[0].id] = totalValue;
   } else if (model === 'Balanced Beta') {
+    // Diversified — splits equally across every suggested replacement
     const share = totalValue / replacements.length;
     replacements.forEach(f => { rupeeAllocs[f.id] = share; });
   } else {
-    const total3Y = replacements.reduce((s, f) => s + (f.cagr3Y ?? 0), 0);
-    replacements.forEach(f => {
-      rupeeAllocs[f.id] = total3Y > 0
-        ? totalValue * ((f.cagr3Y ?? 0) / total3Y)
-        : totalValue / replacements.length;
-    });
+    // Research Driven — weights only funds with a positive 3Y CAGR; others get nothing
+    const positive = replacements.filter(f => (f.cagr3Y ?? 0) > 0);
+    const total3Y = positive.reduce((s, f) => s + (f.cagr3Y ?? 0), 0);
+    if (total3Y > 0) {
+      positive.forEach(f => { rupeeAllocs[f.id] = totalValue * ((f.cagr3Y ?? 0) / total3Y); });
+    } else {
+      const share = totalValue / replacements.length;
+      replacements.forEach(f => { rupeeAllocs[f.id] = share; });
+    }
   }
 
   replacements.forEach(f => {

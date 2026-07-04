@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { userHoldings, fundUniverse } from '../data/mockData';
 import { getRatingTier, getTierColor, formatINR } from '../utils/formatters';
 import type { Fund, RatingTier, RebalancingModel, GroupBreResult } from '../types/rebalancer';
-import { getGroupReplacements, MODEL_METRICS } from '../utils/breEngine';
+import { getGroupReplacements, getGroupModelAllocations, MODEL_METRICS } from '../utils/breEngine';
 import { useRebalancerStore } from '../store/rebalancerStore';
 import { ArrowLeft, Info, ChevronRight, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -244,33 +244,65 @@ export function FundRatingInsights() {
                       </div>
 
                       {/* Coming in */}
-                      {replacements.length > 0 && (
-                        <>
-                          <p className="text-[10px] font-bold text-green-600 uppercase tracking-wider pt-1">Coming In</p>
-                          <div className="space-y-2">
-                            {replacements.map(rep => (
-                              <div key={rep.id} className="bg-green-50 rounded-xl p-3 flex items-center gap-3">
-                                <div
-                                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
-                                  style={{ backgroundColor: rep.amcColor }}
-                                >
-                                  {rep.amcInitials}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-semibold text-gray-800 truncate">{rep.fundName}</p>
-                                  <StarRating rating={rep.geojitRating} size={9} />
-                                </div>
-                                {rep.badge && (
-                                  <span className={cn(
-                                    'text-[9px] px-1.5 py-0.5 rounded font-bold flex-shrink-0',
-                                    rep.badge === 'Gold' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
-                                  )}>{rep.badge}</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
+                      {replacements.length > 0 && (() => {
+                        const allocs = selectedModel ? getGroupModelAllocations(funds, replacements, selectedModel) : {};
+                        return (
+                          <>
+                            <p className="text-[10px] font-bold text-green-600 uppercase tracking-wider pt-1">Coming In</p>
+                            <div className="space-y-2">
+                              {replacements.map(rep => {
+                                const alloc = allocs[rep.id];
+                                const isSelected = !selectedModel || (alloc && alloc.value > 0);
+                                return (
+                                  <div
+                                    key={rep.id}
+                                    className={cn(
+                                      'rounded-xl p-3 flex items-center gap-3',
+                                      isSelected ? 'bg-green-50' : 'bg-gray-100/70 opacity-60'
+                                    )}
+                                  >
+                                    <div
+                                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                                      style={{ backgroundColor: rep.amcColor }}
+                                    >
+                                      {rep.amcInitials}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-semibold text-gray-800 truncate">{rep.fundName}</p>
+                                      <div className="flex items-center gap-1.5 mt-0.5">
+                                        <StarRating rating={rep.geojitRating} size={9} />
+                                        {rep.badge && (
+                                          <span className={cn(
+                                            'text-[9px] px-1.5 py-0.5 rounded font-bold flex-shrink-0',
+                                            rep.badge === 'Gold' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
+                                          )}>{rep.badge}</span>
+                                        )}
+                                      </div>
+                                      <p className="text-[9px] text-gray-400 mt-0.5">
+                                        NAV ₹{(rep.nav ?? 100).toFixed(4)} · 3Y CAGR {rep.cagr3Y ?? 0}%
+                                      </p>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                      {selectedModel ? (
+                                        alloc && alloc.value > 0 ? (
+                                          <>
+                                            <p className="text-xs font-bold text-green-700">{formatINR(alloc.value)}</p>
+                                            <p className="text-[9px] text-gray-400">{alloc.units.toFixed(3)} units</p>
+                                          </>
+                                        ) : (
+                                          <p className="text-[9px] text-gray-400 italic">Not selected</p>
+                                        )
+                                      ) : (
+                                        <p className="text-[9px] text-gray-400 italic">Pick a model</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

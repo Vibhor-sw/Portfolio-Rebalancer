@@ -159,123 +159,95 @@ export function RebalanceConfirm() {
           </div>
         </div>
 
-        {/* ── GROUP MODE TABLE VIEW ─────────────────── */}
+        {/* ── GROUP MODE — compact review cards ─────────────────── */}
         {isGroupMode && groupBreResults.length > 0 ? (
-          <div className="space-y-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rebalancing Summary</p>
-            {groupBreResults.map(gr => {
-              const sourceFunds = gr.sourceFundIds
-                .map(id => userHoldings.find(f => f.id === id))
-                .filter(Boolean) as Fund[];
-              const allocs = getGroupModelAllocations(sourceFunds, gr.replacements, modelToUse);
-              const totalVal = sourceFunds.reduce((s, f) => s + f.holdingValue, 0);
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Rebalancing Summary</p>
+            <div className="space-y-3">
+              {groupBreResults.map(gr => {
+                const sourceFunds = gr.sourceFundIds
+                  .map(id => userHoldings.find(f => f.id === id))
+                  .filter(Boolean) as Fund[];
+                const allocs = getGroupModelAllocations(sourceFunds, gr.replacements, modelToUse);
+                const selectedReplacements = gr.replacements.filter(rep => (allocs[rep.id]?.value ?? 0) > 0);
+                const totalVal = sourceFunds.reduce((s, f) => s + f.holdingValue, 0);
+                const isExpanded = expandedRow === gr.subCategory;
 
-              return (
-                <div key={gr.subCategory} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  {/* Sub-category header */}
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <p className="text-sm font-bold text-gray-900">{gr.subCategory}</p>
-                    <p className="text-xs font-semibold text-gray-500">{formatINR(totalVal)}</p>
-                  </div>
-
-                  {/* Horizontal scroll table */}
-                  <div className="overflow-x-auto">
-                    <table
-                      className="text-xs border-collapse"
-                      style={{ minWidth: `${(sourceFunds.length + gr.replacements.length + 1) * 100}px` }}
+                return (
+                  <div key={gr.subCategory} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <button
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                      onClick={() => setExpandedRow(isExpanded ? null : gr.subCategory)}
                     >
-                      <thead>
-                        <tr className="border-b border-gray-100">
-                          <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase w-16 whitespace-nowrap"></th>
-                          {sourceFunds.map(f => (
-                            <th key={f.id} className="px-3 py-2 text-center min-w-[100px]">
-                              <div className="flex flex-col items-center gap-1">
-                                <span className="text-[9px] bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">Current</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-900">{gr.subCategory}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          Sell {sourceFunds.length} fund{sourceFunds.length > 1 ? 's' : ''} → {selectedReplacements.length} buy order{selectedReplacements.length > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-bold text-brand-red">{formatINR(totalVal)}</p>
+                        {isExpanded ? <ChevronUp size={14} className="text-gray-400 ml-auto mt-0.5" /> : <ChevronDown size={14} className="text-gray-400 ml-auto mt-0.5" />}
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t border-gray-50 px-4 py-3 space-y-2 bg-gray-50/50">
+                        <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full inline-block">REDEEM</span>
+                        {sourceFunds.map(f => (
+                          <div key={f.id} className="flex items-center gap-2">
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0"
+                              style={{ backgroundColor: f.amcColor }}
+                            >
+                              {f.amcInitials}
+                            </div>
+                            <span className="text-xs text-gray-600 flex-1 truncate">{f.fundName}</span>
+                            <span className="text-xs font-bold text-gray-800">{formatINR(f.holdingValue)}</span>
+                          </div>
+                        ))}
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <ArrowRight size={12} className="text-brand-green" />
+                          <span className="text-[10px] font-bold text-green-700">Purchase Orders</span>
+                        </div>
+                        {selectedReplacements.map(rep => {
+                          const alloc = allocs[rep.id];
+                          return (
+                            <div key={rep.id} className="bg-white rounded-xl p-3 border border-green-100">
+                              <div className="flex items-center gap-2">
                                 <div
-                                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
-                                  style={{ backgroundColor: f.amcColor }}
-                                >
-                                  {f.amcInitials}
-                                </div>
-                                <p className="text-[9px] text-gray-600 font-semibold leading-tight text-center max-w-[80px]">
-                                  {f.fundName.split(' ').slice(0, 3).join(' ')}
-                                </p>
-                              </div>
-                            </th>
-                          ))}
-                          {gr.replacements.map(rep => (
-                            <th key={rep.id} className="px-3 py-2 text-center min-w-[100px]">
-                              <div className="flex flex-col items-center gap-1">
-                                <span className="text-[9px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">New</span>
-                                <div
-                                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
+                                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
                                   style={{ backgroundColor: rep.amcColor }}
                                 >
                                   {rep.amcInitials}
                                 </div>
-                                <p className="text-[9px] text-gray-600 font-semibold leading-tight text-center max-w-[80px]">
-                                  {rep.fundName.split(' ').slice(0, 3).join(' ')}
-                                </p>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-gray-900 truncate">{rep.fundName}</p>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <StarRating rating={rep.geojitRating} size={9} />
+                                    {rep.badge && (
+                                      <span className={cn(
+                                        'text-[9px] px-1 py-0.5 rounded font-bold',
+                                        rep.badge === 'Gold' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'
+                                      )}>{rep.badge}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs font-bold text-green-700">{(alloc?.units ?? 0).toFixed(3)} units</p>
+                                  <p className="text-[9px] text-gray-400">{formatINR(alloc?.value ?? 0)}</p>
+                                </div>
                               </div>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* Qty row */}
-                        <tr className="border-b border-gray-50">
-                          <td className="px-3 py-2.5 text-[10px] font-bold text-gray-500 whitespace-nowrap">Qty</td>
-                          {sourceFunds.map(f => (
-                            <td key={f.id} className="px-3 py-2.5 text-center">
-                              <p className="text-xs font-bold text-red-600">
-                                {parseFloat((f.holdingValue / (f.nav ?? 100)).toFixed(3))}
-                              </p>
-                              <p className="text-[9px] text-gray-400">units</p>
-                            </td>
-                          ))}
-                          {gr.replacements.map(rep => (
-                            <td key={rep.id} className="px-3 py-2.5 text-center">
-                              <p className="text-xs font-bold text-green-700">
-                                {(allocs[rep.id]?.units ?? 0).toFixed(3)}
-                              </p>
-                              <p className="text-[9px] text-gray-400">units</p>
-                            </td>
-                          ))}
-                        </tr>
-                        {/* Value row */}
-                        <tr>
-                          <td className="px-3 py-2.5 text-[10px] font-bold text-gray-500 whitespace-nowrap">Value</td>
-                          {sourceFunds.map(f => (
-                            <td key={f.id} className="px-3 py-2.5 text-center">
-                              <p className="text-xs font-bold text-red-600">{formatINR(f.holdingValue)}</p>
-                            </td>
-                          ))}
-                          {gr.replacements.map(rep => (
-                            <td key={rep.id} className="px-3 py-2.5 text-center">
-                              <p className="text-xs font-bold text-green-700">{formatINR(allocs[rep.id]?.value ?? 0)}</p>
-                            </td>
-                          ))}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Star ratings row */}
-                  <div className="px-4 py-2 border-t border-gray-50 flex gap-3">
-                    {sourceFunds.map(f => (
-                      <div key={f.id} className="flex-1 flex justify-center">
-                        <StarRating rating={f.geojitRating} size={8} />
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                    {gr.replacements.map(rep => (
-                      <div key={rep.id} className="flex-1 flex justify-center">
-                        <StarRating rating={rep.geojitRating} size={8} />
-                      </div>
-                    ))}
+                    )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         ) : (
           /* ── INDIVIDUAL MODE — original switch pairs ─── */
